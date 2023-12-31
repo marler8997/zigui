@@ -3,19 +3,19 @@ pub fn main() !u8 {
     const rect1 = uigen.Rect{
         .width = .{ .fixed = 50 },
         .height = .{ .variable = .{ .init = 30 }},
-        .rgba = .{ .r = 255, .g = 0, .b = 0, .a = 255 },
+        .rgba = .{ .fixed = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
     };
 
 
     const inner_rect1 = uigen.Rect{
         .width = .{ .fixed = 30 },
         .height = .{ .fixed = 30 },
-        .rgba = .{ .r = 0, .g = 100, .b = 255, .a = 255 },
+        .rgba = .{ .fixed = .{ .r = 0, .g = 100, .b = 255, .a = 255 } },
     };
     const inner_rect2 = uigen.Rect{
         .width = .{ .fixed = 30 },
         .height = .{ .fixed = 13 },
-        .rgba = .{ .r = 255, .g = 100, .b = 0, .a = 255 },
+        .rgba = .{ .variable = .{ .init = .{ .r = 255, .g = 100, .b = 0, .a = 255 } } },
         .listen_mouse_enter_exit = true,
     };
     const inner_array = uigen.Array{
@@ -29,7 +29,7 @@ pub fn main() !u8 {
     const rect3 = uigen.Rect{
         .width = .{ .fixed = 60 },
         .height = .{ .fixed = 60 },
-        .rgba = .{ .r = 100, .g = 0, .b = 255, .a = 255 },
+        .rgba = .{ .fixed = .{ .r = 100, .g = 0, .b = 255, .a = 255 } },
     };
     const array = uigen.Array{
         .axis = .y,

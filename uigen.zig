@@ -4,8 +4,29 @@ const XY = @import("xy.zig").XY;
 const AnyWriter = @import("anywriter.zig").AnyWriter;
 const anyWriter = @import("anywriter.zig").anyWriter;
 
-const Axis = enum { x, y };
-const Rgba = struct { r: u8, g: u8, b: u8, a: u8 };
+pub const Axis = enum { x, y };
+pub const Rgba = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+
+    pub fn format(
+        self: Rgba,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print("Rgba{{ .r = {}, .g = {}, .b = {}, .a = {} }}", .{
+            self.r,
+            self.g,
+            self.b,
+            self.a,
+        });
+    }
+};
 
 pub fn generate(visual: *const Visual) anyerror!u8 {
     var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -74,7 +95,7 @@ pub const Visual = struct {
     codegen: *const fn(*const Visual, AnyWriter, indent: Indent) anyerror!void,
 };
 
-fn Arg(comptime T: type) type {
+pub fn Arg(comptime T: type) type {
     return union(enum) {
         fixed: T,
         variable: struct {
@@ -245,7 +266,7 @@ pub const Rect = struct {
     },
     width: Arg(u32),
     height: Arg(u32),
-    rgba: Rgba,
+    rgba: Arg(Rgba),
     listen_mouse_enter_exit: bool = false,
 
     fn codegen(base: *const Visual, writer: AnyWriter, indent: Indent) anyerror!void {
@@ -263,6 +284,12 @@ pub const Rect = struct {
                 try writer.print("{}height: u32 = {},\n", .{indent, v.init});
             },
         }
+        switch (self.rgba) {
+            .fixed => {},
+            .variable => |v| {
+                try writer.print("{}rgba: Rgba = {},\n", .{indent, v.init});
+            },
+        }
 
         try writer.print("{}pub fn getWidth(self: @This()) u32 {{\n", .{indent});
         try writer.print("{}    self.hackunused();\n", .{indent});
@@ -272,6 +299,10 @@ pub const Rect = struct {
         try writer.print("{}    self.hackunused();\n", .{indent});
         try writer.print("{}    return {};\n", .{indent, self.height.fmtValue("self.height")});
         try writer.print("{}}}\n", .{indent});
+        //try writer.print("{}pub fn getRgba(self: @This()) Rgba {{\n", .{indent});
+        //try writer.print("{}    self.hackunused();\n", .{indent});
+        //try writer.print("{}    return {};\n", .{indent, self.rgba.fmtValue("self.rgba")});
+        //try writer.print("{}}}\n", .{indent});
         try writer.print("{}pub fn mouseExit(self: *@This()) void {{\n", .{indent});
         try writer.print("{}    self.hackunused();\n", .{indent});
         if (self.listen_mouse_enter_exit) {
@@ -298,9 +329,9 @@ pub const Rect = struct {
         // TODO: resize
         try writer.print("{}pub fn render(self: *@This(), renderer: *Renderer) void {{\n", .{indent});
         try writer.print("{}    self.hackunused();\n", .{indent});
-        try writer.print("{}    renderer.fillRect(renderer, .{{.r={},.g={},.b={},.a={}}}, .{{.x=0,.y=0}}, .{{.x=@intCast({}),.y=@intCast({})}});\n", .{
+        try writer.print("{}    renderer.fillRect(renderer, {}, .{{.x=0,.y=0}}, .{{.x=@intCast({}),.y=@intCast({})}});\n", .{
             indent,
-            self.rgba.r, self.rgba.g, self.rgba.b, self.rgba.a,
+            self.rgba.fmtValue("self.rgba"),
             self.width.fmtValue("self.width"),
             self.height.fmtValue("self.height"),
         });
