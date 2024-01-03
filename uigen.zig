@@ -166,7 +166,7 @@ pub const Array = struct {
                     try writer.print("{}    height = @max(height, self.element{}.getHeight());\n", .{indent, i});
                 },
                 .y => {
-                    try writer.print("{}    height += self.element{}.getWidth();\n", .{indent, i});
+                    try writer.print("{}    height += self.element{}.getHeight();\n", .{indent, i});
                 },
             }
         }

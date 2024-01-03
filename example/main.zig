@@ -21,63 +21,143 @@ const HWND = win32.HWND;
 const HDC = win32.HDC;
 const HBRUSH = win32.HBRUSH;
 const HPEN = win32.HPEN;
+const RECT = win32.RECT;
 
 const global = struct {
     pub var root = generated_ui.Root{ };
 };
+
+fn XYAndSize(comptime T: type) type {
+    return struct {
+        x: T,
+        y: T,
+        w: T,
+        h: T,
+    };
+}
+fn calcWindowRect(hWnd: HWND, desired_size: XY(i32)) XYAndSize(i32) {
+    const monitor = win32.MonitorFromWindow(hWnd, win32.MONITOR_DEFAULTTOPRIMARY) orelse
+        std.debug.panic("MonitorFromWindow failed, error={}", .{win32.GetLastError()});
+
+    var info: win32.MONITORINFO = undefined;
+    info.cbSize = @sizeOf(@TypeOf(info));
+    if (0 == win32.GetMonitorInfoW(monitor, &info))
+        std.debug.panic("GetMonitorInfo failed, error={}", .{win32.GetLastError()});
+
+    const desktop_size_x = info.rcWork.right - info.rcWork.left;
+    const desktop_size_y = info.rcWork.bottom - info.rcWork.top;
+
+    var window_size = desired_size;
+    if (desktop_size_x < desired_size.x) {
+        std.log.info("clamping window width {} to desktop {}", .{desired_size.x, desktop_size_x});
+        window_size.x = desktop_size_x;
+    }
+    if (desktop_size_y < desired_size.y) {
+        std.log.info("clamping window height {} to desktop {}", .{desired_size.y, desktop_size_y});
+        window_size.y = desktop_size_y;
+    }
+
+    const left = info.rcWork.left + @divTrunc(desktop_size_x - window_size.x, 2);
+    const top  = info.rcWork.top  + @divTrunc(desktop_size_y - window_size.y, 2);
+    return .{
+        .x = left, .y = top,
+        .w = window_size.x, .h = window_size.y,
+    };
+}
+
+fn clientToWindowSize(
+    client_size: XY(i32),
+    style: win32.WINDOW_STYLE,
+    menu: i32,
+    ex_style: win32.WINDOW_EX_STYLE,
+    //dpi: u32,
+) XY(i32) {
+    var rect = RECT{
+        .left = 0, .top = 0,
+        .right = client_size.x,
+        .bottom = client_size.y,
+    };
+    if (0 == win32.AdjustWindowRectEx(&rect, style, menu, ex_style))
+        std.debug.panic("AdjustWindowRectEx failed, error={}", .{win32.GetLastError()});
+    return .{
+        .x = rect.right - rect.left,
+        .y = rect.bottom - rect.top,
+    };
+}
+
 pub fn main() void {
-    const CLASS_NAME = L("ExampleWindow");
-    const wc = win32.WNDCLASS{
-        .style = @enumFromInt(0),
-        .lpfnWndProc = WndProcPopover,
-        .cbClsExtra = 0,
-        .cbWndExtra = 0,
-        .hInstance = win32.GetModuleHandle(null),
-        .hIcon = null,
-        .hCursor = win32.LoadCursorA(null, @ptrCast(win32.IDC_ARROW)),
-        .hbrBackground = null,
-        .lpszMenuName = null,
-        .lpszClassName = CLASS_NAME,
-    };
-    const class_id = win32.RegisterClass(&wc);
-    if (class_id == 0)
-        fatal("RegisterClass failed, error={}", .{win32.GetLastError()});
+    {
+        const CLASS_NAME = L("ExampleWindow");
+        const wc = win32.WNDCLASS{
+            .style = @enumFromInt(0),
+            .lpfnWndProc = WndProcPopover,
+            .cbClsExtra = 0,
+            .cbWndExtra = 0,
+            .hInstance = win32.GetModuleHandle(null),
+            .hIcon = null,
+            .hCursor = win32.LoadCursorA(null, @ptrCast(win32.IDC_ARROW)),
+            .hbrBackground = null,
+            .lpszMenuName = null,
+            .lpszClassName = CLASS_NAME,
+        };
+        const class_id = win32.RegisterClass(&wc);
+        if (class_id == 0)
+            fatal("RegisterClass failed, error={}", .{win32.GetLastError()});
 
-    const window_style = win32.WINDOW_STYLE.initFlags(.{
-        .OVERLAPPED=1,
-        .CAPTION=1,
-        .SYSMENU=1,
-        .THICKFRAME=1,
-    });
-    const window_style_ex = win32.WINDOW_EX_STYLE.initFlags(.{});
-    const hWnd = win32.CreateWindowEx(
-        window_style_ex,
-        CLASS_NAME, // Window class
-        L("Example"),
-        window_style,
-        0, 0, // position
-        0, 0, // size
-        null, // Parent window
-        null, // Menu
-        win32.GetModuleHandle(null), // Instance handle
-        null, // Additional application data
-    ) orelse {
-        std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
-        std.os.exit(0xff);
-    };
+        const window_style = win32.WINDOW_STYLE.initFlags(.{
+            .OVERLAPPED=1,
+            .CAPTION=1,
+            .SYSMENU=1,
+            .THICKFRAME=1,
+        });
+        const window_style_ex = win32.WINDOW_EX_STYLE.initFlags(.{});
+        const hWnd = win32.CreateWindowEx(
+            window_style_ex,
+            CLASS_NAME, // Window class
+            L("Example"),
+            window_style,
+            0, 0, // position
+            0, 0, // size
+            null, // Parent window
+            null, // Menu
+            win32.GetModuleHandle(null), // Instance handle
+            null, // Additional application data
+        ) orelse {
+            std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
+            std.os.exit(0xff);
+        };
 
-    // TODO: position the window close to the systray
-    std.debug.assert(0 != win32.SetWindowPos(
-        hWnd,
-        null,
-        0, 0, // position
-        300, 300,
-        win32.SET_WINDOW_POS_FLAGS.initFlags(.{
-            .NOZORDER = 1,
-            //.NOMOVE = 1,
-        }),
-    ));
-    _ = win32.ShowWindow(hWnd, win32.SW_SHOW);
+        const desired_window_size = clientToWindowSize(
+            .{
+                .x = @intCast(global.root.getWidth()),
+                .y = @intCast(global.root.getHeight()),
+            },
+            window_style,
+            0, // menu
+            window_style_ex,
+        );
+
+        const window_rect = calcWindowRect(hWnd, desired_window_size);
+        std.log.info("desired window size {}x{} to {}x{} at {},{}", .{
+            desired_window_size.x,
+            desired_window_size.y,
+            window_rect.w, window_rect.h,
+            window_rect.x, window_rect.y,
+        });
+
+
+        // TODO: position the window close to the systray
+        std.debug.assert(0 != win32.SetWindowPos(
+            hWnd,
+            null,
+            window_rect.x, window_rect.y,
+            window_rect.w, window_rect.h,
+            win32.SET_WINDOW_POS_FLAGS.initFlags(.{
+                .NOZORDER = 1,
+            }),
+        ));
+        _ = win32.ShowWindow(hWnd, win32.SW_SHOW);
+    }
 
     var msg: MSG = undefined;
     while (win32.GetMessage(&msg, null, 0, 0) != 0) {
@@ -102,7 +182,7 @@ pub const Renderer = struct {
     }
     fn fillRect(base: *generated_ui.Renderer, rgba: Rgba, tl: XY(i32), br: XY(i32)) void {
         const self = @fieldParentPtr(Renderer, "base", base);
-        const rect = win32.RECT{
+        const rect = RECT{
             .left = self.offset.x + tl.x,
             .top = self.offset.y + tl.y,
             .right = self.offset.x + br.x,
@@ -202,7 +282,7 @@ fn WndProcPopover(
 }
 
 fn getClientSize(hWnd: HWND) XY(i32) {
-    var rect: win32.RECT = undefined;
+    var rect: RECT = undefined;
     if (0 == win32.GetClientRect(hWnd, &rect))
         fatal("GetClientRect failed, error={}", .{win32.GetLastError()});
     return .{
