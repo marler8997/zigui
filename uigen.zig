@@ -52,20 +52,7 @@ pub fn generate(visual: *const Visual) anyerror!u8 {
     const file_writer = file.writer();
     const writer = anyWriter(&file_writer);
 
-    try writer.writeAll(
-        \\const std = @import("std");
-        \\pub fn XY(comptime T: type) type {
-        \\    return struct {
-        \\        x: T,
-        \\        y: T,
-        \\        pub fn init(x: T, y: T) @This() {
-        \\            return .{ .x = x, .y = y };
-        \\        }
-        \\    };
-        \\}
-        \\pub const Rgba = struct { r: u8, g: u8, b: u8, a: u8 };
-        \\
-    );
+    try writer.writeAll(@embedFile("uigenprefix.zig"));
     try writer.print("pub const MouseButton = enum {{ }};\n", .{});
     try writer.print("pub const Renderer = struct {{\n", .{});
     try writer.print("    move: *const fn(*Renderer, x: i32, y: i32) void,\n", .{});
@@ -147,9 +134,13 @@ pub const Array = struct {
         const self = @fieldParentPtr(Array, "base", base);
 
         for (self.visuals, 0..) |visual, i| {
-            try writer.print("{}element{}: struct {{\n", .{indent, i});
+            try writer.print("{}const Element{} = struct {{\n", .{indent, i});
             try visual.codegen(visual, writer, .{ .depth = indent.depth + 1 });
-            try writer.print("{}}} = .{{}},\n", .{indent});
+            try writer.print("{}}};\n", .{indent});
+        }
+
+        for (self.visuals, 0..) |_, i| {
+            try writer.print("{}element{}: @This().Element{1} = .{{}},\n", .{indent, i});
         }
 
         try writer.print("{}pub fn getWidth(self: @This()) u32 {{\n", .{indent});
@@ -265,8 +256,15 @@ pub const Array = struct {
             },
         }
         try writer.print("{}}}\n", .{indent});
-//        try writer.print("    // call to keep zig from complaining about self being unused\n", .{});
+        try writer.print("{}// call to keep zig from complaining about self being unused\n", .{indent});
         try writer.print("{}fn hackunused(_: *const @This()) void {{ }}\n", .{indent});
+
+        try writer.print("{}pub const vars = \n", .{indent});
+        for (0 .. self.visuals.len) |i| {
+            const prefix: []const u8 = if (i == 0) "  " else "++";
+            try writer.print("{}    {s} subvars(\"{}\", @This().Element{2}.vars.len, @This().Element{2}.vars)\n", .{indent, prefix, i, });
+        }
+        try writer.print("{};\n", .{indent});
     }
 };
 
@@ -348,6 +346,21 @@ pub const Rect = struct {
         try writer.print("{}}}\n", .{indent});
         try writer.print("{}// call to keep zig from complaining about self being unused\n", .{indent});
         try writer.print("{}fn hackunused(_: *const @This()) void {{ }}\n", .{indent});
+
+        try writer.print("{}pub const vars = [_]Variable{{\n", .{indent});
+        switch (self.width) {
+            .fixed => {},
+            .variable => try writer.print("{}    .{{ .width = \"rect\" }},\n", .{indent}),
+        }
+        switch (self.height) {
+            .fixed => {},
+            .variable => try writer.print("{}    .{{ .height = \"rect\" }},\n", .{indent}),
+        }
+        switch (self.rgba) {
+            .fixed => {},
+            .variable => try writer.print("{}    .{{ .rgba = \"rect\" }},\n", .{indent}),
+        }
+        try writer.print("{}}};\n", .{indent});
     }
 };
 

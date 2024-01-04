@@ -8,7 +8,7 @@ pub fn main() !u8 {
 
 
     const inner_rect1 = uigen.Rect{
-        .width = .{ .fixed = 140 },
+        .width = .{ .variable = .{ .init = 140, .min = null, .max = null }},
         .height = .{ .fixed = 30 },
         .rgba = .{ .fixed = .{ .r = 0, .g = 100, .b = 255, .a = 255 } },
     };
