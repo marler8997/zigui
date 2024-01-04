@@ -2,7 +2,7 @@ const uigen = @import("uigen");
 pub fn main() !u8 {
     const rect1 = uigen.Rect{
         .width = .{ .fixed = 50 },
-        .height = .{ .variable = .{ .init = 30 }},
+        .height = .{ .variable = .{ .init = 30, .min = null, .max = null }},
         .rgba = .{ .fixed = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
     };
 

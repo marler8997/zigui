@@ -97,8 +97,18 @@ pub const Visual = struct {
 
 pub fn Arg(comptime T: type) type {
     return union(enum) {
+        pub const is_ordered = switch (T) {
+            u32 => true,
+            Rgba => false,
+            else => @compileError("todo: handle Arg of " ++ @typeName(T)),
+        };
+
         fixed: T,
-        variable: struct {
+        variable: if (is_ordered) struct {
+            init: T,
+            min: ?T,
+            max: ?T,
+        } else struct {
             init: T,
         },
 

@@ -35,7 +35,8 @@ fn XYAndSize(comptime T: type) type {
         h: T,
     };
 }
-fn calcWindowRect(hWnd: HWND, desired_size: XY(i32)) XYAndSize(i32) {
+
+fn getMonitorRect(hWnd: HWND) RECT {
     const monitor = win32.MonitorFromWindow(hWnd, win32.MONITOR_DEFAULTTOPRIMARY) orelse
         std.debug.panic("MonitorFromWindow failed, error={}", .{win32.GetLastError()});
 
@@ -43,9 +44,12 @@ fn calcWindowRect(hWnd: HWND, desired_size: XY(i32)) XYAndSize(i32) {
     info.cbSize = @sizeOf(@TypeOf(info));
     if (0 == win32.GetMonitorInfoW(monitor, &info))
         std.debug.panic("GetMonitorInfo failed, error={}", .{win32.GetLastError()});
+    return info.rcWork;
+}
 
-    const desktop_size_x = info.rcWork.right - info.rcWork.left;
-    const desktop_size_y = info.rcWork.bottom - info.rcWork.top;
+fn calcCenteredWindowRect(monitor_rect: RECT, desired_size: XY(i32)) XYAndSize(i32) {
+    const desktop_size_x = monitor_rect.right - monitor_rect.left;
+    const desktop_size_y = monitor_rect.bottom - monitor_rect.top;
 
     var window_size = desired_size;
     if (desktop_size_x < desired_size.x) {
@@ -57,8 +61,8 @@ fn calcWindowRect(hWnd: HWND, desired_size: XY(i32)) XYAndSize(i32) {
         window_size.y = desktop_size_y;
     }
 
-    const left = info.rcWork.left + @divTrunc(desktop_size_x - window_size.x, 2);
-    const top  = info.rcWork.top  + @divTrunc(desktop_size_y - window_size.y, 2);
+    const left = monitor_rect.left + @divTrunc(desktop_size_x - window_size.x, 2);
+    const top  = monitor_rect.top  + @divTrunc(desktop_size_y - window_size.y, 2);
     return .{
         .x = left, .y = top,
         .w = window_size.x, .h = window_size.y,
@@ -86,11 +90,81 @@ fn clientToWindowSize(
 }
 
 pub fn main() void {
+    const CLASS_NAME_EXAMPLE = L("ExampleWindow");
+    const wc_example = win32.WNDCLASS{
+        .style = @enumFromInt(0),
+        .lpfnWndProc = WndProcExample,
+        .cbClsExtra = 0,
+        .cbWndExtra = 0,
+        .hInstance = win32.GetModuleHandle(null),
+        .hIcon = null,
+        .hCursor = win32.LoadCursorA(null, @ptrCast(win32.IDC_ARROW)),
+        .hbrBackground = null,
+        .lpszMenuName = null,
+        .lpszClassName = CLASS_NAME_EXAMPLE,
+    };
+    if (0 == win32.RegisterClass(&wc_example))
+        fatal("RegisterClass failed, error={}", .{win32.GetLastError()});
+
+    const window_style_example = win32.WINDOW_STYLE.initFlags(.{
+        .OVERLAPPED=1,
+        .CAPTION=1,
+        .SYSMENU=1,
+        .THICKFRAME=1,
+    });
+    const window_style_example_ex = win32.WINDOW_EX_STYLE.initFlags(.{});
+    const hwnd_example = win32.CreateWindowEx(
+        window_style_example_ex,
+        CLASS_NAME_EXAMPLE, // Window class
+        L("Example"),
+        window_style_example,
+        0, 0, // position
+        0, 0, // size
+        null, // Parent window
+        null, // Menu
+        win32.GetModuleHandle(null), // Instance handle
+        null, // Additional application data
+    ) orelse {
+        std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
+        std.os.exit(0xff);
+    };
+
+    const example_window_desired_size = clientToWindowSize(
+        .{
+            .x = @intCast(global.root.getWidth()),
+            .y = @intCast(global.root.getHeight()),
+        },
+        window_style_example,
+        0, // menu
+        window_style_example_ex,
+    );
+
+    const monitor_rect = getMonitorRect(hwnd_example);
+    const window_rect_example = calcCenteredWindowRect(monitor_rect, example_window_desired_size);
+    std.log.info("desired window size {}x{} to {}x{} at {},{}", .{
+        example_window_desired_size.x,
+        example_window_desired_size.y,
+        window_rect_example.w, window_rect_example.h,
+        window_rect_example.x, window_rect_example.y,
+    });
+
+    // TODO: position the window close to the systray
+    std.debug.assert(0 != win32.SetWindowPos(
+        hwnd_example,
+        null,
+        window_rect_example.x, window_rect_example.y,
+        window_rect_example.w, window_rect_example.h,
+        win32.SET_WINDOW_POS_FLAGS.initFlags(.{
+            .NOZORDER = 1,
+        }),
+    ));
+    _ = win32.ShowWindow(hwnd_example, win32.SW_SHOW);
+
     {
-        const CLASS_NAME = L("ExampleWindow");
-        const wc = win32.WNDCLASS{
+        const CLASS_NAME = L("ControlWindow");
+        const wc_control = win32.WNDCLASS{
             .style = @enumFromInt(0),
-            .lpfnWndProc = WndProcPopover,
+            .lpfnWndProc = WndProcControl,
             .cbClsExtra = 0,
             .cbWndExtra = 0,
             .hInstance = win32.GetModuleHandle(null),
@@ -100,8 +174,7 @@ pub fn main() void {
             .lpszMenuName = null,
             .lpszClassName = CLASS_NAME,
         };
-        const class_id = win32.RegisterClass(&wc);
-        if (class_id == 0)
+        if (0 == win32.RegisterClass(&wc_control))
             fatal("RegisterClass failed, error={}", .{win32.GetLastError()});
 
         const window_style = win32.WINDOW_STYLE.initFlags(.{
@@ -114,7 +187,7 @@ pub fn main() void {
         const hWnd = win32.CreateWindowEx(
             window_style_ex,
             CLASS_NAME, // Window class
-            L("Example"),
+            L("Controls"),
             window_style,
             0, 0, // position
             0, 0, // size
@@ -127,31 +200,31 @@ pub fn main() void {
             std.os.exit(0xff);
         };
 
-        const desired_window_size = clientToWindowSize(
+        const window_size = clientToWindowSize(
             .{
-                .x = @intCast(global.root.getWidth()),
-                .y = @intCast(global.root.getHeight()),
+                // TODO: base size on the number of controls
+                .x = 200,
+                .y = 400,
             },
             window_style,
             0, // menu
             window_style_ex,
         );
 
-        const window_rect = calcWindowRect(hWnd, desired_window_size);
-        std.log.info("desired window size {}x{} to {}x{} at {},{}", .{
-            desired_window_size.x,
-            desired_window_size.y,
-            window_rect.w, window_rect.h,
-            window_rect.x, window_rect.y,
+        std.log.info("control window at {},{}", .{
+            window_rect_example.x - window_size.x,
+            // TODO: center the y axis?
+            window_rect_example.y,
         });
-
 
         // TODO: position the window close to the systray
         std.debug.assert(0 != win32.SetWindowPos(
             hWnd,
             null,
-            window_rect.x, window_rect.y,
-            window_rect.w, window_rect.h,
+            window_rect_example.x - window_size.x,
+            // TODO: center the y axis?
+            window_rect_example.y,
+            window_size.x, window_size.y,
             win32.SET_WINDOW_POS_FLAGS.initFlags(.{
                 .NOZORDER = 1,
             }),
@@ -233,13 +306,13 @@ fn get_y_lparam(lParam: win32.LPARAM) i16 {
     return @intCast((lParam >> 16) & 0xffff);
 }
 
-fn WndProcPopover(
+fn WndProcExample(
     hWnd: HWND,
     uMsg: u32,
     wParam: win32.WPARAM,
     lParam: win32.LPARAM,
 ) callconv(std.os.windows.WINAPI) win32.LRESULT {
-    //if (hWnd != global.hwnd_popover and uMsg != win32.WM_CREATE) @panic("codebug");
+    //if (hWnd != global.hwnd_example and uMsg != win32.WM_CREATE) @panic("codebug");
 
     switch (uMsg) {
         // TODO: handle when the mouse exits the window
@@ -276,6 +349,31 @@ fn WndProcPopover(
         //// always invalidate the full client area on each window resize
         //std.debug.assert(0 != win32.InvalidateRect(hWnd, null, 0));
         //},
+        else => {},
+    }
+    return win32.DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+fn WndProcControl(
+    hWnd: HWND,
+    uMsg: u32,
+    wParam: win32.WPARAM,
+    lParam: win32.LPARAM,
+) callconv(std.os.windows.WINAPI) win32.LRESULT {
+    switch (uMsg) {
+        win32.WM_DESTROY => {
+            win32.PostQuitMessage(0);
+            return 0;
+        },
+        win32.WM_PAINT => {
+            var ps: win32.PAINTSTRUCT = undefined;
+            const hdc = win32.BeginPaint(hWnd, &ps) orelse
+                std.debug.panic("BeginPaint failed, error={}", .{win32.GetLastError()});
+            const msg = "TODO: put controls here";
+            _ = win32.TextOutA(hdc, 10, 10, msg, msg.len);
+            _ = win32.EndPaint(hWnd, &ps);
+            return 0;
+        },
         else => {},
     }
     return win32.DefWindowProc(hWnd, uMsg, wParam, lParam);
