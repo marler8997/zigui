@@ -251,37 +251,32 @@ fn addControls(hWnd: HWND, y: *i32) void {
     const label_width = 100;
     inline for (generated_ui.Root.vars, 1..) |v, i| {
         const event_base = var_event_reserve_count * i;
-
-        const control: struct {
-            name: [*:0]const u16,
-            is_number: bool,
-        } = switch (v) {
-            .width => |name| .{ .name = L(name ++ ".width"), .is_number = true },
-            .height => |name| .{ .name = L(name ++ ".height"), .is_number = true },
-            .rgba => |name| .{ .name = L(name ++ ".rgba"), .is_number = false },
-        };
+        const field_path = comptime v.fieldPathString();
         createText(
-            control.name,
+            L(&field_path),
             10, y.*,
             label_width, line_height,
             hWnd,
             //@ptrFromInt(i),
         );
-        if (control.is_number) {
-            createButton(
-                L("-"),
-                10 + label_width, y.*,
-                20, line_height,
-                hWnd,
-                @ptrFromInt(event_base),
-            );
-            createButton(
-                L("+"),
-                10 + label_width + 20, y.*,
-                20, line_height,
-                hWnd,
-                @ptrFromInt(event_base + 1),
-            );
+        switch (v.@"type") {
+            .rgba => {},
+            .uint => {
+                createButton(
+                    L("-"),
+                    10 + label_width, y.*,
+                    20, line_height,
+                    hWnd,
+                    @ptrFromInt(event_base),
+                );
+                createButton(
+                    L("+"),
+                    10 + label_width + 20, y.*,
+                    20, line_height,
+                    hWnd,
+                    @ptrFromInt(event_base + 1),
+                );
+            },
         }
 
         y.* += line_height;

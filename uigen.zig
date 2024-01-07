@@ -59,7 +59,7 @@ pub fn generate(visual: *const Visual) anyerror!u8 {
     try writer.print("    fillRect: *const fn(*Renderer, rgba: Rgba, XY(i32), XY(i32)) void,\n", .{});
     try writer.print("}};\n", .{});
     try writer.print("pub const Root = struct {{\n", .{});
-    try visual.codegen(visual, writer, Indent{ .depth = 1 });
+    try visual.codegen(visual, writer, Indent{ .depth = 1 }, &[_][]const u8{ });
     try writer.print("}};\n", .{});
     return 0;
 }
@@ -79,7 +79,12 @@ const Indent = struct {
 };
 
 pub const Visual = struct {
-    codegen: *const fn(*const Visual, AnyWriter, indent: Indent) anyerror!void,
+    codegen: *const fn(
+        *const Visual,
+        AnyWriter,
+        indent: Indent,
+        path: []const []const u8,
+    ) anyerror!void,
 };
 
 pub fn Arg(comptime T: type) type {
@@ -123,6 +128,18 @@ pub fn Arg(comptime T: type) type {
     };
 }
 
+fn makePath(
+    allocator: std.mem.Allocator,
+    path: []const []const u8,
+    name: []const u8,
+) []const []const u8 {
+    var sub_path = std.ArrayList([]const u8).init(allocator);
+    defer sub_path.deinit();
+    sub_path.appendSlice(path) catch @panic("OOM");
+    sub_path.append(name) catch @panic("OOM");
+    return sub_path.toOwnedSlice() catch @panic("OOM");
+}
+
 pub const Array = struct {
     base: Visual = .{
         .codegen = codegen,
@@ -130,12 +147,24 @@ pub const Array = struct {
     axis: Axis,
     visuals: []const *const Visual,
 
-    fn codegen(base: *const Visual, writer: AnyWriter, indent: Indent) anyerror!void {
+    fn codegen(
+        base: *const Visual,
+        writer: AnyWriter,
+        indent: Indent,
+        path: []const []const u8,
+    ) anyerror!void {
         const self = @fieldParentPtr(Array, "base", base);
 
         for (self.visuals, 0..) |visual, i| {
+            var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer arena_instance.deinit();
+            const allocator = arena_instance.allocator();
+            const field_name = std.fmt.allocPrint(allocator, "element{}", .{i}) catch @panic("OOM");
+            defer allocator.free(field_name);
+            const sub_path = makePath(allocator, path, field_name);
+            defer allocator.free(sub_path);
             try writer.print("{}const Element{} = struct {{\n", .{indent, i});
-            try visual.codegen(visual, writer, .{ .depth = indent.depth + 1 });
+            try visual.codegen(visual, writer, .{ .depth = indent.depth + 1 }, sub_path);
             try writer.print("{}}};\n", .{indent});
         }
 
@@ -262,7 +291,7 @@ pub const Array = struct {
         try writer.print("{}pub const vars = \n", .{indent});
         for (0 .. self.visuals.len) |i| {
             const prefix: []const u8 = if (i == 0) "  " else "++";
-            try writer.print("{}    {s} subvars(\"{}\", @This().Element{2}.vars.len, @This().Element{2}.vars)\n", .{indent, prefix, i, });
+            try writer.print("{}    {s} subvars(&[_][]const u8 {{ \"element{}\" }}, @This().Element{2}.vars.len, @This().Element{2}.vars)\n", .{indent, prefix, i, });
         }
         try writer.print("{};\n", .{indent});
     }
@@ -277,7 +306,12 @@ pub const Rect = struct {
     rgba: Arg(Rgba),
     listen_mouse_enter_exit: bool = false,
 
-    fn codegen(base: *const Visual, writer: AnyWriter, indent: Indent) anyerror!void {
+    fn codegen(
+        base: *const Visual,
+        writer: AnyWriter,
+        indent: Indent,
+        path: []const []const u8,
+    ) anyerror!void {
         const self = @fieldParentPtr(Rect, "base", base);
 
         switch (self.width) {
@@ -350,19 +384,58 @@ pub const Rect = struct {
         try writer.print("{}pub const vars = [_]Variable{{\n", .{indent});
         switch (self.width) {
             .fixed => {},
-            .variable => try writer.print("{}    .{{ .width = \"rect\" }},\n", .{indent}),
+            .variable => try writer.print("{}    {},\n", .{indent, fmtVariable(path, "width", .uint)}),
         }
         switch (self.height) {
             .fixed => {},
-            .variable => try writer.print("{}    .{{ .height = \"rect\" }},\n", .{indent}),
+            .variable => try writer.print("{}    {},\n", .{indent, fmtVariable(path, "height", .uint)}),
         }
         switch (self.rgba) {
             .fixed => {},
-            .variable => try writer.print("{}    .{{ .rgba = \"rect\" }},\n", .{indent}),
+            .variable => try writer.print("{}    {},\n", .{indent, fmtVariable(path, "rgba", .rgba)}),
         }
         try writer.print("{}}};\n", .{indent});
     }
 };
+
+const VariableType = enum {
+    uint, rgba
+};
+pub const VariableFormatter = struct {
+    path: []const []const u8,
+    name: []const u8,
+    @"type": VariableType,
+
+    pub fn format(
+        self: VariableFormatter,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print(
+            ".{{ .@\"type\" = .{s}, .field_path = &[_][]const u8 {{",
+            .{ @tagName(self.@"type") },
+        );
+        for (self.path) |name| {
+            try writer.print(" \"{s}\",", .{name});
+        }
+        try writer.print(" \"{s}\"", .{self.name});
+        try writer.print(" }} }}", .{});
+    }
+};
+pub fn fmtVariable(
+    path: []const []const u8,
+    name: []const u8,
+    t: VariableType,
+) VariableFormatter {
+    return .{
+        .path = path,
+        .name = name,
+        .@"type" = t,
+    };
+}
 
 //pub const StaticLabel = struct {
 //    base: Visual,
