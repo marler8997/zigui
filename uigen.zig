@@ -153,7 +153,7 @@ pub const Array = struct {
         indent: Indent,
         path: []const []const u8,
     ) anyerror!void {
-        const self = @fieldParentPtr(Array, "base", base);
+        const self: *const Array = @fieldParentPtr("base", base);
 
         for (self.visuals, 0..) |visual, i| {
             var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -312,7 +312,7 @@ pub const Rect = struct {
         indent: Indent,
         path: []const []const u8,
     ) anyerror!void {
-        const self = @fieldParentPtr(Rect, "base", base);
+        const self: *const Rect = @fieldParentPtr("base", base);
 
         switch (self.width) {
             .fixed => {},

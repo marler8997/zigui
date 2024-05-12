@@ -91,29 +91,29 @@ fn clientToWindowSize(
 
 pub fn main() void {
     const CLASS_NAME_EXAMPLE = L("ExampleWindow");
-    const wc_example = win32.WNDCLASS{
-        .style = @enumFromInt(0),
+    const wc_example = win32.WNDCLASSW{
+        .style = .{},
         .lpfnWndProc = WndProcExample,
         .cbClsExtra = 0,
         .cbWndExtra = 0,
-        .hInstance = win32.GetModuleHandle(null),
+        .hInstance = win32.GetModuleHandleW(null),
         .hIcon = null,
         .hCursor = win32.LoadCursorA(null, @ptrCast(win32.IDC_ARROW)),
         .hbrBackground = null,
         .lpszMenuName = null,
         .lpszClassName = CLASS_NAME_EXAMPLE,
     };
-    if (0 == win32.RegisterClass(&wc_example))
+    if (0 == win32.RegisterClassW(&wc_example))
         fatal("RegisterClass failed, error={}", .{win32.GetLastError()});
 
-    const window_style_example = win32.WINDOW_STYLE.initFlags(.{
-        .OVERLAPPED=1,
-        .CAPTION=1,
+    const window_style_example: win32.WINDOW_STYLE = .{
+        .BORDER = 1,
+        .DLGFRAME = 1,
         .SYSMENU=1,
         .THICKFRAME=1,
-    });
-    const window_style_example_ex = win32.WINDOW_EX_STYLE.initFlags(.{});
-    const hwnd_example = win32.CreateWindowEx(
+    };
+    const window_style_example_ex: win32.WINDOW_EX_STYLE = .{};
+    const hwnd_example = win32.CreateWindowExW(
         window_style_example_ex,
         CLASS_NAME_EXAMPLE, // Window class
         L("Example"),
@@ -122,11 +122,11 @@ pub fn main() void {
         0, 0, // size
         null, // Parent window
         null, // Menu
-        win32.GetModuleHandle(null), // Instance handle
+        win32.GetModuleHandleW(null), // Instance handle
         null, // Additional application data
     ) orelse {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
-        std.os.exit(0xff);
+        std.process.exit(0xff);
     };
 
     const example_window_desired_size = clientToWindowSize(
@@ -154,47 +154,47 @@ pub fn main() void {
         null,
         window_rect_example.x, window_rect_example.y,
         window_rect_example.w, window_rect_example.h,
-        win32.SET_WINDOW_POS_FLAGS.initFlags(.{
+        win32.SET_WINDOW_POS_FLAGS{
             .NOZORDER = 1,
-        }),
+        },
     ));
     _ = win32.ShowWindow(hwnd_example, win32.SW_SHOW);
 
     createControlWindow(window_rect_example);
 
     var msg: MSG = undefined;
-    while (win32.GetMessage(&msg, null, 0, 0) != 0) {
+    while (win32.GetMessageW(&msg, null, 0, 0) != 0) {
         // No need for TranslateMessage since we don't use WM_*CHAR messages
         //_ = win32.TranslateMessage(&msg);
-        _ = win32.DispatchMessage(&msg);
+        _ = win32.DispatchMessageW(&msg);
     }
 }
 
 fn createControlWindow(window_rect_example: XYAndSize(i32)) void {
     const CLASS_NAME = L("ControlWindow");
-    const wc_control = win32.WNDCLASS{
-        .style = @enumFromInt(0),
+    const wc_control = win32.WNDCLASSW{
+        .style = .{},
         .lpfnWndProc = WndProcControl,
         .cbClsExtra = 0,
         .cbWndExtra = 0,
-        .hInstance = win32.GetModuleHandle(null),
+        .hInstance = win32.GetModuleHandleW(null),
         .hIcon = null,
         .hCursor = win32.LoadCursorA(null, @ptrCast(win32.IDC_ARROW)),
         .hbrBackground = null,
         .lpszMenuName = null,
         .lpszClassName = CLASS_NAME,
     };
-    if (0 == win32.RegisterClass(&wc_control))
+    if (0 == win32.RegisterClassW(&wc_control))
         fatal("RegisterClass failed, error={}", .{win32.GetLastError()});
 
-    const window_style = win32.WINDOW_STYLE.initFlags(.{
-        .OVERLAPPED=1,
-        .CAPTION=1,
+    const window_style: win32.WINDOW_STYLE = .{
+        .BORDER = 1,
+        .DLGFRAME = 1,
         .SYSMENU=1,
         .THICKFRAME=1,
-    });
-    const window_style_ex = win32.WINDOW_EX_STYLE.initFlags(.{});
-    const hWnd = win32.CreateWindowEx(
+    };
+    const window_style_ex: win32.WINDOW_EX_STYLE = .{};
+    const hWnd = win32.CreateWindowExW(
         window_style_ex,
         CLASS_NAME, // Window class
         L("Controls"),
@@ -203,11 +203,11 @@ fn createControlWindow(window_rect_example: XYAndSize(i32)) void {
         0, 0, // size
         null, // Parent window
         null, // Menu
-        win32.GetModuleHandle(null), // Instance handle
+        win32.GetModuleHandleW(null), // Instance handle
         null, // Additional application data
     ) orelse {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
-        std.os.exit(0xff);
+        std.process.exit(0xff);
     };
 
     var next_y: i32 = 20;
@@ -237,9 +237,9 @@ fn createControlWindow(window_rect_example: XYAndSize(i32)) void {
         // TODO: center the y axis?
         window_rect_example.y,
         window_size.x, window_size.y,
-        win32.SET_WINDOW_POS_FLAGS.initFlags(.{
+        win32.SET_WINDOW_POS_FLAGS{
             .NOZORDER = 1,
-        }),
+        },
     ));
     _ = win32.ShowWindow(hWnd, win32.SW_SHOW);
 }
@@ -289,15 +289,15 @@ fn createText(
     width: i32, height: i32,
     parent: HWND,
 ) void {
-    _ = win32.CreateWindowEx(
-        win32.WINDOW_EX_STYLE.initFlags(.{}),
+    _ = win32.CreateWindowExW(
+        .{},
         L("STATIC"),
         text,
-        win32.WINDOW_STYLE.initFlags(.{
+        .{
             .CHILD=1,
             .VISIBLE=1,
             // SS_CENTER?
-        }),
+        },
         x, y,
         width, height,
         parent, // Parent window
@@ -318,15 +318,15 @@ fn createButton(
     parent: HWND,
     menu: win32.HMENU,
 ) void {
-    _ = win32.CreateWindowEx(
-        win32.WINDOW_EX_STYLE.initFlags(.{}),
+    _ = win32.CreateWindowExW(
+        .{},
         L("BUTTON"),
         text,
-        win32.WINDOW_STYLE.initFlags(.{
+        .{
             .CHILD=1,
             .VISIBLE=1,
             .TABSTOP=1,
-        }),
+        },
         x, y,
         width, height,
         parent, // Parent window
@@ -348,12 +348,12 @@ pub const Renderer = struct {
     offset: XY(i32) = .{ .x = 0, .y = 0 },
 
     fn move(base: *generated_ui.Renderer, x: i32, y: i32) void {
-        const self = @fieldParentPtr(Renderer, "base", base);
+        const self: *Renderer = @fieldParentPtr("base", base);
         self.offset.x += x;
         self.offset.y += y;
     }
     fn fillRect(base: *generated_ui.Renderer, rgba: Rgba, tl: XY(i32), br: XY(i32)) void {
-        const self = @fieldParentPtr(Renderer, "base", base);
+        const self: *Renderer = @fieldParentPtr("base", base);
         const rect = RECT{
             .left = self.offset.x + tl.x,
             .top = self.offset.y + tl.y,
@@ -379,7 +379,7 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     const msg = std.fmt.allocPrintZ(arena.allocator(), fmt, args) catch @panic("Out of memory");
     const result = win32.MessageBoxA(null, msg.ptr, null, win32.MB_OK);
     std.log.info("MessageBox result is {}", .{result});
-    std.os.exit(0xff);
+    std.process.exit(0xff);
 }
 
 const Rgb = struct {
@@ -450,7 +450,7 @@ fn WndProcExample(
         //},
         else => {},
     }
-    return win32.DefWindowProc(hWnd, uMsg, wParam, lParam);
+    return win32.DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
 fn WndProcControl(
@@ -476,7 +476,7 @@ fn WndProcControl(
         },
         else => {},
     }
-    return win32.DefWindowProc(hWnd, uMsg, wParam, lParam);
+    return win32.DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
 fn getClientSize(hWnd: HWND) XY(i32) {
