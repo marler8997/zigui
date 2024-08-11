@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .zigwin32 = .{
-            .url = "https://github.com/marlersoft/zigwin32/archive/c778640d3dc153e900fbe37e2816b5176af3c802.tar.gz",
-            .hash = "122001853ff1c42814e8d5e65f630be7cc15a530e92253b2935bcc8ebe3fb402fdbb",
+            .url = "https://github.com/marlersoft/zigwin32/archive/407a4c7b869ee3d10db520fdfae8b9faf9b2adb5.tar.gz",
+            .hash = "1220cc9c9028e20f4ec2ece1155ae3479acc1cc509f9ab93acb74e8f5bbf8eefd2a9",
         },
     },
 

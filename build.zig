@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
 
     const zigwin32 = b.dependency("zigwin32", .{});
     const uigen = b.addModule("uigen", .{
-        .root_source_file = .{ .path = "uigen.zig" },
+        .root_source_file = b.path("uigen.zig"),
     });
 
     inline for (&[_][]const u8 {
@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     }) |example_name| {
         const gen_exe = b.addExecutable(.{
             .name = "example-" ++ example_name ++ "-gen",
-            .root_source_file = .{ .path = "example/" ++ example_name ++ ".zig" },
+            .root_source_file = b.path("example/" ++ example_name ++ ".zig"),
             .single_threaded = true,
             .target = b.host,
         });
@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
         });
         const exe = b.addExecutable(.{
             .name = "example-" ++ example_name,
-            .root_source_file = .{ .path = "example/main.zig" },
+            .root_source_file = b.path("example/main.zig"),
             .target = target,
             .optimize = optimize,
             .single_threaded = true,
