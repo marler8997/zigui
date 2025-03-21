@@ -1,12 +1,13 @@
 .{
-    .name = "zigui",
+    .name = .ui,
+    .fingerprint = 0x27ff46b0e1e8d5d3,
     .version = "0.0.1",
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.14.0",
 
     .dependencies = .{
-        .zigwin32 = .{
-            .url = "https://github.com/marlersoft/zigwin32/archive/407a4c7b869ee3d10db520fdfae8b9faf9b2adb5.tar.gz",
-            .hash = "1220cc9c9028e20f4ec2ece1155ae3479acc1cc509f9ab93acb74e8f5bbf8eefd2a9",
+        .win32 = .{
+            .url = "git+https://github.com/marlersoft/zigwin32#be58d3816810c1e4c20781cc7223a60906467d3c",
+            .hash = "zigwin32-25.0.28-preview-AAAAAHsJ-wPA4nREAzT_OOkF6gLrornNuHqREfHDADoS",
         },
     },
 

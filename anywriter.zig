@@ -18,7 +18,7 @@ pub const AnyWriter = std.io.Writer(
 /// that forwards data to it.
 pub fn anyWriter(writer_ref: anytype) AnyWriter {
     const Writer = switch (@typeInfo(@TypeOf(writer_ref))) {
-        .Pointer => |info| info.child,
+        .pointer => |info| info.child,
         else => @compileError("unexpected type given to anyWriter: " ++ @typeName(@TypeOf(writer_ref))),
     };
     const Wrap = struct {
@@ -55,11 +55,11 @@ test "function pointer that takes writer" {
             try writer.writeAll("hello");
         }
     };
-    
+
     var buffer: [10]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buffer);
 
-    const func: *const fn(writer: AnyWriter) anyerror!void = &Wrap.writeHello;
+    const func: *const fn (writer: AnyWriter) anyerror!void = &Wrap.writeHello;
     try func(anyWriter(&fbs.writer()));
     try testing.expect(mem.eql(u8, fbs.getWritten(), "hello"));
 }

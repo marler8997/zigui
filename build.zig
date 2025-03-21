@@ -4,12 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zigwin32 = b.dependency("zigwin32", .{});
+    const win32_dep = b.dependency("win32", .{});
     const uigen = b.addModule("uigen", .{
         .root_source_file = b.path("uigen.zig"),
     });
 
-    inline for (&[_][]const u8 {
+    inline for (&[_][]const u8{
         "rect",
         "array",
     }) |example_name| {
@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
             .name = "example-" ++ example_name ++ "-gen",
             .root_source_file = b.path("example/" ++ example_name ++ ".zig"),
             .single_threaded = true,
-            .target = b.host,
+            .target = b.graph.host,
         });
         gen_exe.root_module.addImport("uigen", uigen);
         const run_gen = b.addRunArtifact(gen_exe);
@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .single_threaded = true,
         });
-        exe.root_module.addImport("win32", zigwin32.module("zigwin32"));
+        exe.root_module.addImport("win32", win32_dep.module("win32"));
         exe.root_module.addImport("generated_ui", gen_module);
 
         b.installArtifact(exe);
