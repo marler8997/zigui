@@ -1,9 +1,6 @@
 const std = @import("std");
 const XY = @import("xy.zig").XY;
 
-const AnyWriter = @import("anywriter.zig").AnyWriter;
-const anyWriter = @import("anywriter.zig").anyWriter;
-
 pub const Axis = enum { x, y };
 pub const Rgba = struct {
     r: u8,
@@ -35,9 +32,7 @@ pub fn generate(visual: *const Visual) anyerror!u8 {
     const allocator = arena_instance.allocator();
     const full_cmdline = try std.process.argsAlloc(allocator);
     if (full_cmdline.len <= 1) {
-        try std.io.getStdErr().writer().print("Usage: {s} OUT_FILE\n", .{
-            std.fs.path.basename(full_cmdline[0])
-        });
+        try std.io.getStdErr().writer().print("Usage: {s} OUT_FILE\n", .{std.fs.path.basename(full_cmdline[0])});
         return 0xff;
     }
     const args = full_cmdline[1..];
@@ -50,7 +45,7 @@ pub fn generate(visual: *const Visual) anyerror!u8 {
     var file = try std.fs.cwd().createFile(out_filename, .{});
     defer file.close();
     const file_writer = file.writer();
-    const writer = anyWriter(&file_writer);
+    const writer = file_writer.any();
 
     try writer.writeAll(@embedFile("uigenprefix.zig"));
     try writer.print("pub const MouseButton = enum {{ }};\n", .{});
@@ -59,7 +54,7 @@ pub fn generate(visual: *const Visual) anyerror!u8 {
     try writer.print("    fillRect: *const fn(*Renderer, rgba: Rgba, XY(i32), XY(i32)) void,\n", .{});
     try writer.print("}};\n", .{});
     try writer.print("pub const Root = struct {{\n", .{});
-    try visual.codegen(visual, writer, Indent{ .depth = 1 }, &[_][]const u8{ });
+    try visual.codegen(visual, writer, Indent{ .depth = 1 }, &[_][]const u8{});
     try writer.print("}};\n", .{});
     return 0;
 }
@@ -74,14 +69,16 @@ const Indent = struct {
     ) !void {
         _ = fmt;
         _ = options;
-        for (0 .. self.depth) |_| { try writer.writeAll("    "); }
+        for (0..self.depth) |_| {
+            try writer.writeAll("    ");
+        }
     }
 };
 
 pub const Visual = struct {
-    codegen: *const fn(
+    codegen: *const fn (
         *const Visual,
-        AnyWriter,
+        std.io.AnyWriter,
         indent: Indent,
         path: []const []const u8,
     ) anyerror!void,
@@ -149,7 +146,7 @@ pub const Array = struct {
 
     fn codegen(
         base: *const Visual,
-        writer: AnyWriter,
+        writer: std.io.AnyWriter,
         indent: Indent,
         path: []const []const u8,
     ) anyerror!void {
@@ -163,13 +160,13 @@ pub const Array = struct {
             defer allocator.free(field_name);
             const sub_path = makePath(allocator, path, field_name);
             defer allocator.free(sub_path);
-            try writer.print("{}const Element{} = struct {{\n", .{indent, i});
+            try writer.print("{}const Element{} = struct {{\n", .{ indent, i });
             try visual.codegen(visual, writer, .{ .depth = indent.depth + 1 }, sub_path);
             try writer.print("{}}};\n", .{indent});
         }
 
         for (self.visuals, 0..) |_, i| {
-            try writer.print("{}element{}: @This().Element{1} = .{{}},\n", .{indent, i});
+            try writer.print("{}element{}: @This().Element{1} = .{{}},\n", .{ indent, i });
         }
 
         try writer.print("{}pub fn getWidth(self: @This()) u32 {{\n", .{indent});
@@ -178,10 +175,10 @@ pub const Array = struct {
         for (self.visuals, 0..) |_, i| {
             switch (self.axis) {
                 .x => {
-                    try writer.print("{}    width += self.element{}.getWidth();\n", .{indent, i});
+                    try writer.print("{}    width += self.element{}.getWidth();\n", .{ indent, i });
                 },
                 .y => {
-                    try writer.print("{}    width = @max(width, self.element{}.getWidth());\n", .{indent, i});
+                    try writer.print("{}    width = @max(width, self.element{}.getWidth());\n", .{ indent, i });
                 },
             }
         }
@@ -193,10 +190,10 @@ pub const Array = struct {
         for (self.visuals, 0..) |_, i| {
             switch (self.axis) {
                 .x => {
-                    try writer.print("{}    height = @max(height, self.element{}.getHeight());\n", .{indent, i});
+                    try writer.print("{}    height = @max(height, self.element{}.getHeight());\n", .{ indent, i });
                 },
                 .y => {
-                    try writer.print("{}    height += self.element{}.getHeight();\n", .{indent, i});
+                    try writer.print("{}    height += self.element{}.getHeight();\n", .{ indent, i });
                 },
             }
         }
@@ -208,7 +205,7 @@ pub const Array = struct {
         //       to  limit how many elements we call
         //
         for (self.visuals, 0..) |_, i| {
-            try writer.print("{}    self.element{}.mouseExit();\n", .{indent, i});
+            try writer.print("{}    self.element{}.mouseExit();\n", .{ indent, i });
         }
         try writer.print("{}}}\n", .{indent});
         try writer.print("{}pub fn mouseMove(self: *@This(), pos: XY(i32)) void {{\n", .{indent});
@@ -221,48 +218,63 @@ pub const Array = struct {
         //       to  limit how many elements we check
         //
         try writer.print("{}    var offset: i32 = 0;\n", .{indent});
-        const main_width_height: []const u8 = switch (self.axis) { .x => "Width", .y => "Height" };
-        const cross_width_height: []const u8 = switch (self.axis) { .x => "Height", .y => "Width" };
-        const cross_axis: Axis = switch (self.axis) { .x => .y, .y => .x };
+        const main_width_height: []const u8 = switch (self.axis) {
+            .x => "Width",
+            .y => "Height",
+        };
+        const cross_width_height: []const u8 = switch (self.axis) {
+            .x => "Height",
+            .y => "Width",
+        };
+        const cross_axis: Axis = switch (self.axis) {
+            .x => .y,
+            .y => .x,
+        };
         for (self.visuals, 0..) |_, i| {
             try writer.print("{}    {{\n", .{indent});
-            try writer.print("{}        const size: i32 = @intCast(self.element{}.get{s}());\n", .{indent, i, main_width_height});
+            try writer.print("{}        const size: i32 = @intCast(self.element{}.get{s}());\n", .{ indent, i, main_width_height });
             try writer.print("{}        const next_offset = offset + size;\n", .{indent});
-            try writer.print("{}        if (pos.{s} >= offset and pos.{1s} < next_offset) {{\n", .{indent, @tagName(self.axis)});
-            try writer.print("{}            const cross_size = self.element{}.get{s}();\n", .{indent, i, cross_width_height});
-            try writer.print("{}            if (pos.{s} < cross_size) {{\n", .{indent, @tagName(cross_axis)});
-            try writer.print("{}                self.element{}.mouseMove(\n", .{indent, i});
+            try writer.print("{}        if (pos.{s} >= offset and pos.{1s} < next_offset) {{\n", .{ indent, @tagName(self.axis) });
+            try writer.print("{}            const cross_size = self.element{}.get{s}();\n", .{ indent, i, cross_width_height });
+            try writer.print("{}            if (pos.{s} < cross_size) {{\n", .{ indent, @tagName(cross_axis) });
+            try writer.print("{}                self.element{}.mouseMove(\n", .{ indent, i });
             try writer.print("{}                    .{{ .x = pos.x - {s}, .y = pos.y - {s}}},\n", .{
                 indent,
-                switch (self.axis) { .x => "offset", .y => "0" },
-                switch (self.axis) { .x => "0", .y => "offset" },
+                switch (self.axis) {
+                    .x => "offset",
+                    .y => "0",
+                },
+                switch (self.axis) {
+                    .x => "0",
+                    .y => "offset",
+                },
             });
             try writer.print("{}                );\n", .{indent});
             try writer.print("{}            }} else {{\n", .{indent});
-            try writer.print("{}                self.element{}.mouseExit();\n", .{indent, i});
+            try writer.print("{}                self.element{}.mouseExit();\n", .{ indent, i });
             try writer.print("{}            }}\n", .{indent});
             try writer.print("{}        }} else {{\n", .{indent});
-            try writer.print("{}            self.element{}.mouseExit();\n", .{indent, i});
+            try writer.print("{}            self.element{}.mouseExit();\n", .{ indent, i });
             try writer.print("{}        }}\n", .{indent});
             try writer.print("{}        offset = next_offset;\n", .{indent});
             try writer.print("{}    }}\n", .{indent});
         }
         try writer.print("{}}}\n", .{indent});
-//        try writer.print("    pub fn mouseButton(self: *@This(), pos: XY(i32), btn: MouseButton) void {{\n", .{});
-//        try writer.print("        self.hackunused();\n", .{});
-//        try writer.print("        _ = pos;\n", .{});
-//        try writer.print("        _ = btn;\n", .{});
-//        try writer.print("    }}\n", .{});
-//        // TODO: button
-//        // TODO: invalidateRect
-//        // TODO: resize
+        //        try writer.print("    pub fn mouseButton(self: *@This(), pos: XY(i32), btn: MouseButton) void {{\n", .{});
+        //        try writer.print("        self.hackunused();\n", .{});
+        //        try writer.print("        _ = pos;\n", .{});
+        //        try writer.print("        _ = btn;\n", .{});
+        //        try writer.print("    }}\n", .{});
+        //        // TODO: button
+        //        // TODO: invalidateRect
+        //        // TODO: resize
         try writer.print("{}pub fn render(self: *@This(), renderer: *Renderer) void {{\n", .{indent});
         try writer.print("{}    self.hackunused();\n", .{indent});
         try writer.print("{}    var total_offset: i32 = 0;\n", .{indent});
         for (self.visuals, 0..) |_, i| {
             if (i > 0) {
                 try writer.print("{}    {{\n", .{indent});
-                try writer.print("{}        const size: i32 = @intCast(self.element{}.get{s}());\n", .{indent, i - 1, main_width_height});
+                try writer.print("{}        const size: i32 = @intCast(self.element{}.get{s}());\n", .{ indent, i - 1, main_width_height });
                 switch (self.axis) {
                     .x => {
                         try writer.print("{}        renderer.move(renderer, size, 0);\n", .{indent});
@@ -274,7 +286,7 @@ pub const Array = struct {
                 try writer.print("{}        total_offset += size;\n", .{indent});
                 try writer.print("{}    }}\n", .{indent});
             }
-            try writer.print("{}    self.element{}.render(renderer);\n", .{indent, i});
+            try writer.print("{}    self.element{}.render(renderer);\n", .{ indent, i });
         }
         switch (self.axis) {
             .x => {
@@ -289,9 +301,13 @@ pub const Array = struct {
         try writer.print("{}fn hackunused(_: *const @This()) void {{ }}\n", .{indent});
 
         try writer.print("{}pub const vars = \n", .{indent});
-        for (0 .. self.visuals.len) |i| {
+        for (0..self.visuals.len) |i| {
             const prefix: []const u8 = if (i == 0) "  " else "++";
-            try writer.print("{}    {s} subvars(&[_][]const u8 {{ \"element{}\" }}, @This().Element{2}.vars.len, @This().Element{2}.vars)\n", .{indent, prefix, i, });
+            try writer.print("{}    {s} subvars(&[_][]const u8 {{ \"element{}\" }}, @This().Element{2}.vars.len, @This().Element{2}.vars)\n", .{
+                indent,
+                prefix,
+                i,
+            });
         }
         try writer.print("{};\n", .{indent});
     }
@@ -308,7 +324,7 @@ pub const Rect = struct {
 
     fn codegen(
         base: *const Visual,
-        writer: AnyWriter,
+        writer: std.io.AnyWriter,
         indent: Indent,
         path: []const []const u8,
     ) anyerror!void {
@@ -317,29 +333,29 @@ pub const Rect = struct {
         switch (self.width) {
             .fixed => {},
             .variable => |v| {
-                try writer.print("{}width: u32 = {},\n", .{indent, v.init});
+                try writer.print("{}width: u32 = {},\n", .{ indent, v.init });
             },
         }
         switch (self.height) {
             .fixed => {},
             .variable => |v| {
-                try writer.print("{}height: u32 = {},\n", .{indent, v.init});
+                try writer.print("{}height: u32 = {},\n", .{ indent, v.init });
             },
         }
         switch (self.rgba) {
             .fixed => {},
             .variable => |v| {
-                try writer.print("{}rgba: Rgba = {},\n", .{indent, v.init});
+                try writer.print("{}rgba: Rgba = {},\n", .{ indent, v.init });
             },
         }
 
         try writer.print("{}pub fn getWidth(self: @This()) u32 {{\n", .{indent});
         try writer.print("{}    self.hackunused();\n", .{indent});
-        try writer.print("{}    return {};\n", .{indent, self.width.fmtValue("self.width")});
+        try writer.print("{}    return {};\n", .{ indent, self.width.fmtValue("self.width") });
         try writer.print("{}}}\n", .{indent});
         try writer.print("{}pub fn getHeight(self: @This()) u32 {{\n", .{indent});
         try writer.print("{}    self.hackunused();\n", .{indent});
-        try writer.print("{}    return {};\n", .{indent, self.height.fmtValue("self.height")});
+        try writer.print("{}    return {};\n", .{ indent, self.height.fmtValue("self.height") });
         try writer.print("{}}}\n", .{indent});
         //try writer.print("{}pub fn getRgba(self: @This()) Rgba {{\n", .{indent});
         //try writer.print("{}    self.hackunused();\n", .{indent});
@@ -384,27 +400,25 @@ pub const Rect = struct {
         try writer.print("{}pub const vars = [_]Variable{{\n", .{indent});
         switch (self.width) {
             .fixed => {},
-            .variable => try writer.print("{}    {},\n", .{indent, fmtVariable(path, "width", .uint)}),
+            .variable => try writer.print("{}    {},\n", .{ indent, fmtVariable(path, "width", .uint) }),
         }
         switch (self.height) {
             .fixed => {},
-            .variable => try writer.print("{}    {},\n", .{indent, fmtVariable(path, "height", .uint)}),
+            .variable => try writer.print("{}    {},\n", .{ indent, fmtVariable(path, "height", .uint) }),
         }
         switch (self.rgba) {
             .fixed => {},
-            .variable => try writer.print("{}    {},\n", .{indent, fmtVariable(path, "rgba", .rgba)}),
+            .variable => try writer.print("{}    {},\n", .{ indent, fmtVariable(path, "rgba", .rgba) }),
         }
         try writer.print("{}}};\n", .{indent});
     }
 };
 
-const VariableType = enum {
-    uint, rgba
-};
+const VariableType = enum { uint, rgba };
 pub const VariableFormatter = struct {
     path: []const []const u8,
     name: []const u8,
-    @"type": VariableType,
+    type: VariableType,
 
     pub fn format(
         self: VariableFormatter,
@@ -416,7 +430,7 @@ pub const VariableFormatter = struct {
         _ = options;
         try writer.print(
             ".{{ .@\"type\" = .{s}, .field_path = &[_][]const u8 {{",
-            .{ @tagName(self.@"type") },
+            .{@tagName(self.type)},
         );
         for (self.path) |name| {
             try writer.print(" \"{s}\",", .{name});
@@ -433,7 +447,7 @@ pub fn fmtVariable(
     return .{
         .path = path,
         .name = name,
-        .@"type" = t,
+        .type = t,
     };
 }
 
